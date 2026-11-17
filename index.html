@@ -1,0 +1,344 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>포모도로 타이머</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: one centered timer column. Mode tabs, progress ring with time, controls, cycle dots, collapsible settings. */
+:root {
+  --bg: #eceff3;
+  --surface: #ffffff;
+  --fg: #1a1e25;
+  --muted: #586172;
+  --line: #d6dbe3;
+  --track: #e2e6ec;
+  --focus: #c9452f;
+  --short: #1f7a58;
+  --long: #2b5dbf;
+  --accent: var(--focus);
+  --on-accent: #ffffff;
+  --font-body: "Inter", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-num: "Space Grotesk", "Inter", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151a; --surface: #1b1f26; --fg: #eceef2; --muted: #9aa3b2; --line: #2d333d; --track: #2a303a;
+    --focus: #ee6a55; --short: #4cb88e; --long: #6f9cf2; --on-accent: #101216; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151a; --surface: #1b1f26; --fg: #eceef2; --muted: #9aa3b2; --line: #2d333d; --track: #2a303a;
+  --focus: #ee6a55; --short: #4cb88e; --long: #6f9cf2; --on-accent: #101216; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-block: 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.app { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.app[data-mode="focus"] { --accent: var(--focus); }
+.app[data-mode="short"] { --accent: var(--short); }
+.app[data-mode="long"] { --accent: var(--long); }
+h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--track); padding: 4px; border-radius: 10px; }
+.tab {
+  font: inherit; font-weight: 500; font-size: 14px; color: var(--muted); background: transparent; border: 0;
+  padding: 8px 4px; border-radius: 7px; cursor: pointer; min-width: 0;
+}
+.tab[aria-selected="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.dial { position: relative; width: min(100%, 300px); aspect-ratio: 1; margin: 20px auto 8px; }
+.dial svg { width: 100%; height: 100%; transform: rotate(-90deg); display: block; }
+.dial .trk { fill: none; stroke: var(--track); stroke-width: 10; }
+.dial .bar { fill: none; stroke: var(--accent); stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset .25s linear, stroke .2s; }
+.readout { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.time { font-family: var(--font-num); font-weight: 500; font-size: clamp(52px, 17vw, 72px); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1; }
+.state { font-size: 14px; color: var(--muted); }
+.controls { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
+.btn {
+  font: inherit; font-weight: 600; font-size: 15px; border-radius: 10px; padding: 11px 18px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg); min-height: 44px;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); min-width: 120px; }
+.tab:focus-visible, .btn:focus-visible, summary:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dots { display: flex; gap: 8px; align-items: center; }
+.dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); background: transparent; }
+.dot.on { background: var(--focus); border-color: var(--focus); }
+.label { font-size: 13px; color: var(--muted); }
+.count { font-family: var(--font-num); font-weight: 600; font-size: 20px; font-variant-numeric: tabular-nums; }
+details summary { cursor: pointer; font-weight: 600; font-size: 14px; list-style: none; display: flex; justify-content: space-between; }
+details summary::-webkit-details-marker { display: none; }
+details summary::after { content: "열기"; color: var(--muted); font-weight: 400; font-size: 13px; }
+details[open] summary::after { content: "닫기"; }
+.rows { display: flex; flex-direction: column; margin-top: 12px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+.row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.row-name { font-weight: 500; font-size: 15px; }
+.row-sub { font-size: 13px; color: var(--muted); }
+.stepper { display: flex; align-items: center; gap: 4px; flex: none; }
+.step {
+  width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg);
+  color: var(--fg); font: inherit; font-size: 20px; line-height: 1; cursor: pointer; display: grid; place-items: center; padding: 0;
+}
+.step:hover { border-color: var(--accent); color: var(--accent); }
+.stepper input {
+  width: 48px; text-align: center; border: 0; background: transparent; color: var(--fg); padding: 4px 0;
+  font-family: var(--font-num); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; -moz-appearance: textfield; appearance: textfield;
+}
+.stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.unit { font-size: 13px; color: var(--muted); width: 16px; }
+.switch {
+  appearance: none; -webkit-appearance: none; flex: none; width: 46px; height: 28px; border-radius: 14px; margin: 0;
+  background: var(--track); border: 1px solid var(--line); position: relative; cursor: pointer; transition: background .2s, border-color .2s;
+}
+.switch::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--muted); transition: transform .2s, background .2s;
+}
+.switch:checked { background: var(--accent); border-color: var(--accent); }
+.switch:checked::after { transform: translateX(18px); background: var(--on-accent); }
+.hint { margin: 0; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+kbd {
+  font-family: var(--font-num); font-size: 12px; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--fg);
+}
+@media (prefers-reduced-motion: reduce) { .switch, .switch::after { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .dial .bar { transition: none; } }
+</style>
+
+<main class="app" id="app" data-mode="focus">
+  <h1>포모도로 타이머</h1>
+
+  <section class="card" aria-label="타이머">
+    <div class="tabs" role="tablist" aria-label="모드 선택">
+      <button class="tab" role="tab" id="tab-focus" data-mode="focus" aria-selected="true">집중</button>
+      <button class="tab" role="tab" id="tab-short" data-mode="short" aria-selected="false">짧은 휴식</button>
+      <button class="tab" role="tab" id="tab-long" data-mode="long" aria-selected="false">긴 휴식</button>
+    </div>
+
+    <div class="dial">
+      <svg viewBox="0 0 240 240" aria-hidden="true">
+        <circle class="trk" cx="120" cy="120" r="108"></circle>
+        <circle class="bar" id="bar" cx="120" cy="120" r="108"></circle>
+      </svg>
+      <div class="readout">
+        <div class="time" id="time" role="timer" aria-live="off">25:00</div>
+        <div class="state" id="state" aria-live="polite">시작 전</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="reset" type="button">초기화</button>
+      <button class="btn primary" id="toggle" type="button">시작</button>
+      <button class="btn" id="skip" type="button">건너뛰기</button>
+    </div>
+  </section>
+
+  <section class="card meta" aria-label="진행 상황">
+    <div>
+      <div class="label">이번 사이클 (집중 4회 후 긴 휴식)</div>
+      <div class="dots" id="dots" aria-label="완료한 집중 횟수"></div>
+    </div>
+    <div style="text-align:right">
+      <div class="label">오늘 완료한 집중</div>
+      <div class="count"><span id="done">0</span>회</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <details id="settings">
+      <summary>설정</summary>
+      <div class="rows">
+        <div class="row">
+          <label class="row-text" for="in-focus"><span class="row-name">집중</span><span class="row-sub">1 ~ 120분</span></label>
+          <div class="stepper">
+            <button class="step" type="button" data-for="in-focus" data-d="-1" aria-label="집중 시간 1분 줄이기">−</button>
+            <input id="in-focus" type="number" min="1" max="120" inputmode="numeric">
+            <button class="step" type="button" data-for="in-focus" data-d="1" aria-label="집중 시간 1분 늘리기">+</button>
+            <span class="unit">분</span>
+          </div>
+        </div>
+        <div class="row">
+          <label class="row-text" for="in-short"><span class="row-name">짧은 휴식</span><span class="row-sub">1 ~ 60분</span></label>
+          <div class="stepper">
+            <button class="step" type="button" data-for="in-short" data-d="-1" aria-label="짧은 휴식 1분 줄이기">−</button>
+            <input id="in-short" type="number" min="1" max="60" inputmode="numeric">
+            <button class="step" type="button" data-for="in-short" data-d="1" aria-label="짧은 휴식 1분 늘리기">+</button>
+            <span class="unit">분</span>
+          </div>
+        </div>
+        <div class="row">
+          <label class="row-text" for="in-long"><span class="row-name">긴 휴식</span><span class="row-sub">1 ~ 60분</span></label>
+          <div class="stepper">
+            <button class="step" type="button" data-for="in-long" data-d="-1" aria-label="긴 휴식 1분 줄이기">−</button>
+            <input id="in-long" type="number" min="1" max="60" inputmode="numeric">
+            <button class="step" type="button" data-for="in-long" data-d="1" aria-label="긴 휴식 1분 늘리기">+</button>
+            <span class="unit">분</span>
+          </div>
+        </div>
+        <label class="row" for="auto">
+          <span class="row-text"><span class="row-name">자동 시작</span><span class="row-sub">한 단계가 끝나면 다음 단계를 바로 시작합니다</span></span>
+          <input id="auto" class="switch" type="checkbox" role="switch">
+        </label>
+        <p class="hint"><kbd>Space</kbd> 로 시작·일시정지. 알림음은 시작 버튼을 누른 뒤부터 울립니다.</p>
+      </div>
+    </details>
+  </section>
+</main>
+
+<script>
+(function () {
+  var LABELS = { focus: '집중', short: '짧은 휴식', long: '긴 휴식' };
+  var CYCLE = 4;
+  var R = 108, C = 2 * Math.PI * R;
+  var KEY = 'pomodoro-v1';
+
+  var cfg = { focus: 25, short: 5, long: 15, auto: false };
+  var st = { mode: 'focus', remaining: 25 * 60, running: false, endAt: 0, cycle: 0 };
+  var doneToday = 0, day = today();
+  var audio = null, timerId = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var app = $('app'), bar = $('bar'), timeEl = $('time'), stateEl = $('state'), toggleBtn = $('toggle');
+  bar.style.strokeDasharray = C;
+
+  function today() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (!raw) return;
+      var s = JSON.parse(raw);
+      if (s.cfg) for (var k in cfg) if (k in s.cfg) cfg[k] = s.cfg[k];
+      if (s.day === today()) doneToday = s.done || 0;
+    } catch (e) {}
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify({ cfg: cfg, day: day, done: doneToday })); } catch (e) {}
+  }
+
+  function total() { return cfg[st.mode] * 60; }
+  function fmt(s) { var m = Math.floor(s / 60), r = s % 60; return (m < 10 ? '0' : '') + m + ':' + (r < 10 ? '0' : '') + r; }
+
+  function render() {
+    app.setAttribute('data-mode', st.mode);
+    ['focus', 'short', 'long'].forEach(function (m) { $('tab-' + m).setAttribute('aria-selected', String(m === st.mode)); });
+    timeEl.textContent = fmt(st.remaining);
+    bar.style.strokeDashoffset = C * (1 - st.remaining / total());
+    var fresh = st.remaining === total();
+    stateEl.textContent = st.running ? LABELS[st.mode] + ' 중' : (fresh ? LABELS[st.mode] + ' 준비' : '일시정지');
+    toggleBtn.textContent = st.running ? '일시정지' : (fresh ? '시작' : '계속');
+    var dots = $('dots');
+    if (dots.children.length !== CYCLE) { dots.innerHTML = ''; for (var i = 0; i < CYCLE; i++) { var d = document.createElement('span'); d.className = 'dot'; dots.appendChild(d); } }
+    for (var j = 0; j < CYCLE; j++) dots.children[j].className = 'dot' + (j < st.cycle ? ' on' : '');
+    $('done').textContent = doneToday;
+  }
+
+  function ensureAudio() {
+    try {
+      if (!audio) { var AC = window.AudioContext || window.webkitAudioContext; if (AC) audio = new AC(); }
+      if (audio && audio.state === 'suspended') audio.resume();
+    } catch (e) {}
+  }
+  function beep() {
+    if (!audio) return;
+    try {
+      for (var i = 0; i < 3; i++) {
+        var t = audio.currentTime + i * 0.32;
+        var o = audio.createOscillator(), g = audio.createGain();
+        o.type = 'sine'; o.frequency.value = 880;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+        o.connect(g); g.connect(audio.destination);
+        o.start(t); o.stop(t + 0.26);
+      }
+    } catch (e) {}
+  }
+
+  function stopLoop() { if (timerId) { clearInterval(timerId); timerId = null; } }
+  function startLoop() { stopLoop(); timerId = setInterval(tick, 250); }
+
+  function setMode(m, run) {
+    st.mode = m; st.remaining = cfg[m] * 60; st.running = !!run;
+    if (run) { st.endAt = Date.now() + st.remaining * 1000; startLoop(); } else stopLoop();
+    render();
+  }
+
+  function advance(counted) {
+    if (day !== today()) { day = today(); doneToday = 0; }
+    var next;
+    if (st.mode === 'focus') {
+      if (counted) { doneToday++; st.cycle = Math.min(CYCLE, st.cycle + 1); }
+      next = st.cycle >= CYCLE ? 'long' : 'short';
+    } else {
+      if (st.mode === 'long') st.cycle = 0;
+      next = 'focus';
+    }
+    save();
+    setMode(next, cfg.auto);
+  }
+
+  function tick() {
+    if (!st.running) return;
+    var left = Math.max(0, Math.ceil((st.endAt - Date.now()) / 1000));
+    if (left !== st.remaining) { st.remaining = left; render(); }
+    if (left <= 0) { beep(); advance(true); }
+  }
+
+  function toggle() {
+    ensureAudio();
+    if (st.running) {
+      st.remaining = Math.max(0, Math.ceil((st.endAt - Date.now()) / 1000));
+      st.running = false; stopLoop();
+    } else {
+      st.running = true; st.endAt = Date.now() + st.remaining * 1000; startLoop();
+    }
+    render();
+  }
+
+  toggleBtn.addEventListener('click', toggle);
+  $('reset').addEventListener('click', function () { setMode(st.mode, false); });
+  $('skip').addEventListener('click', function () { advance(false); });
+  document.querySelectorAll('.tab').forEach(function (b) {
+    b.addEventListener('click', function () { setMode(b.getAttribute('data-mode'), false); });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.code !== 'Space') return;
+    var t = e.target && e.target.tagName;
+    if (t === 'INPUT' || t === 'BUTTON' || t === 'SUMMARY' || t === 'TEXTAREA') return;
+    e.preventDefault(); toggle();
+  });
+
+  ['focus', 'short', 'long'].forEach(function (m) {
+    var el = $('in-' + m);
+    el.addEventListener('change', function () {
+      var max = m === 'focus' ? 120 : 60;
+      var v = Math.round(Number(el.value));
+      if (!(v >= 1)) v = cfg[m];
+      v = Math.min(max, v);
+      cfg[m] = v; el.value = v; save();
+      if (st.mode === m && !st.running) { st.remaining = v * 60; render(); }
+    });
+  });
+  $('auto').addEventListener('change', function (e) { cfg.auto = e.target.checked; save(); });
+  document.querySelectorAll('.step').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var el = $(b.getAttribute('data-for'));
+      el.value = (Number(el.value) || 0) + Number(b.getAttribute('data-d'));
+      el.dispatchEvent(new Event('change'));
+    });
+  });
+
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) tick(); });
+
+  load();
+  $('in-focus').value = cfg.focus; $('in-short').value = cfg.short; $('in-long').value = cfg.long; $('auto').checked = cfg.auto;
+  st.remaining = cfg.focus * 60;
+  render();
+})();
+</script>
+
+</body></html>
